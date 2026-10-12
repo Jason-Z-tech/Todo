@@ -4,8 +4,10 @@ set -x
 OUT=screenshots
 mkdir -p "$OUT"
 
-shot() { sleep "${2:-2}"; adb exec-out screencap -p > "$OUT/$1.png"; }
-tap() { python3 .github/scripts/tap.py "$1"; }
+# System-Dialoge des Emulators („… reagiert nicht“) wegklicken
+calm() { python3 .github/scripts/tap.py "Wait" --quiet || true; }
+shot() { sleep "${2:-2}"; calm; adb exec-out screencap -p > "$OUT/$1.png"; }
+tap() { calm; python3 .github/scripts/tap.py "$1"; }
 
 # Feste Uhrzeit, damit der Ablauf reproduzierbar ist: 12.10.2026, 08:00
 adb root
@@ -13,6 +15,8 @@ sleep 3
 adb shell settings put global auto_time 0
 adb shell settings put system time_12_24 24
 adb shell date 101208002026.00
+sleep 20   # Launcher nach dem Zeitsprung zur Ruhe kommen lassen
+calm
 
 adb install -r Tagwerk.apk
 adb shell pm grant app.tagwerk android.permission.POST_NOTIFICATIONS

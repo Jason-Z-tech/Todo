@@ -6,7 +6,8 @@ import time
 import xml.etree.ElementTree as ET
 
 target = sys.argv[1]
-for _ in range(6):
+quiet = "--quiet" in sys.argv
+for _ in range(1 if quiet else 6):
     subprocess.run(["adb", "shell", "uiautomator", "dump", "/sdcard/ui.xml"], capture_output=True)
     raw = subprocess.run(["adb", "exec-out", "cat", "/sdcard/ui.xml"], capture_output=True).stdout
     try:
@@ -20,6 +21,8 @@ for _ in range(6):
             subprocess.run(["adb", "shell", "input", "tap", str((x1 + x2) // 2), str((y1 + y2) // 2)])
             print(f"tapped {target!r}")
             sys.exit(0)
-    time.sleep(1)
-print(f"not found: {target!r}")
+    if not quiet:
+        time.sleep(1)
+if not quiet:
+    print(f"not found: {target!r}")
 sys.exit(1)
