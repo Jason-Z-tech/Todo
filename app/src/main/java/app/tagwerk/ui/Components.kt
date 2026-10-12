@@ -39,6 +39,8 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -108,7 +110,8 @@ fun CheckCircle(
                 indication = null,
                 role = Role.Checkbox,
                 onClick = onClick,
-            ),
+            )
+            .semantics { contentDescription = if (checked) "Erledigt" else "Abhaken" },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(size)) {
