@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- kleiner Butterkreis -->
+    <path
+        android:fillColor="#F8E8B0"
+        android:pathData="M74,36m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+    <!-- Karte -->
+    <path
+        android:fillColor="#FFFDFA"
+        android:pathData="M42,32L66,32A10,10 0,0 1,76 42L76,66A10,10 0,0 1,66 76L42,76A10,10 0,0 1,32 66L32,42A10,10 0,0 1,42 32Z" />
+    <!-- Salbeiblatt -->
+    <path
+        android:fillColor="#D4E6CC"
+        android:pathData="M32,70C32,60 38,56 46,56C46,66 40,72 32,70Z" />
+    <!-- Häkchen -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#3B3236"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M43,54L51,62L66,45" />
+</vector>
