@@ -5,22 +5,32 @@ Eine ruhige To-do-App in Pastelltönen – mit Abhaken, Uhrzeiten und Erinnerung
 ## Vorschau
 
 <p>
-  <img src="https://github.com/Jason-Z-tech/Todo/releases/download/latest/1-tag.png" width="200" alt="Tagesansicht" />
-  <img src="https://github.com/Jason-Z-tech/Todo/releases/download/latest/3b-neue-aufgabe-unten.png" width="200" alt="Neue Aufgabe" />
-  <img src="https://github.com/Jason-Z-tech/Todo/releases/download/latest/5-erinnerung.png" width="200" alt="Erinnerung" />
-  <img src="https://github.com/Jason-Z-tech/Todo/releases/download/latest/8-dunkel-alle.png" width="200" alt="Dunkler Modus" />
+  <img src="https://github.com/Jason-Z-tech/Todo/releases/latest/download/1-tag.png" width="200" alt="Tagesansicht" />
+  <img src="https://github.com/Jason-Z-tech/Todo/releases/latest/download/3b-neue-aufgabe-unten.png" width="200" alt="Neue Aufgabe" />
+  <img src="https://github.com/Jason-Z-tech/Todo/releases/latest/download/5-erinnerung.png" width="200" alt="Erinnerung" />
+  <img src="https://github.com/Jason-Z-tech/Todo/releases/latest/download/8-dunkel-alle.png" width="200" alt="Dunkler Modus" />
 </p>
 
 Die Bilder entstehen bei jedem Build automatisch im Android-Emulator.
 
 ## Installieren
 
-1. Auf dem Handy die neueste APK herunterladen:
-   **[Tagwerk.apk](../../releases/download/latest/Tagwerk.apk)** (Seite: *Releases → latest*)
-2. Öffnen und „Installation aus unbekannten Quellen“ für den Browser bzw. Dateimanager erlauben.
-3. Beim ersten Start Benachrichtigungen erlauben, damit die Erinnerungen ankommen.
+1. Auf dem Handy diesen Link **in Chrome** öffnen (nicht im Browser einer Chat-App):
+   **https://github.com/Jason-Z-tech/Todo/releases/latest/download/Tagwerk.apk**
+2. Fragt Chrome „Datei kann schädlich sein“, auf **Trotzdem herunterladen** tippen.
+3. Die Datei öffnen und „Installation aus dieser Quelle zulassen“ für Chrome erlauben.
+4. Falls Play Protect fragt: **Details → Trotzdem installieren**.
+5. Beim ersten Start Benachrichtigungen erlauben, damit die Erinnerungen ankommen.
 
-Jeder Push baut die App automatisch neu (GitHub Actions → *APK bauen*).
+Updates installiert man genauso – sie werden über die bestehende App installiert,
+Aufgaben bleiben erhalten.
+
+Jeder Push baut die App neu, testet sie im Emulator und veröffentlicht sie danach als
+neue Version unter *Releases*. Der Link oben zeigt immer auf die neueste Version.
+
+**Signatur:** Alle Builds werden mit dem Schlüssel in `signing/tagwerk.jks` signiert,
+damit Updates zur installierten App passen. Für eine private App ist das so in Ordnung;
+wer die App weitergibt, sollte den Schlüssel stattdessen als GitHub-Secret hinterlegen.
 
 ## Funktionen
 

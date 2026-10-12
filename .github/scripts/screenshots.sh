@@ -70,3 +70,8 @@ adb logcat -d -b crash > "$OUT/crash.txt"
 echo "--- Abstürze ---"
 cat "$OUT/crash.txt"
 ls -la "$OUT"
+
+# Der Test soll nur grün sein, wenn die App nicht abstürzt und die Erinnerung ankommt.
+if [ -s "$OUT/crash.txt" ]; then echo "FEHLER: App ist abgestürzt"; exit 1; fi
+grep -q "pkg=app.tagwerk" "$OUT/notifications.txt" || { echo "FEHLER: keine Erinnerung erschienen"; exit 1; }
+echo "Emulator-Test bestanden"

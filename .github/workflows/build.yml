@@ -26,21 +26,18 @@ jobs:
           ./gradlew assembleDebug assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk Tagwerk.apk
 
+      - name: Signatur und Version prüfen
+        run: |
+          TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
+          "$TOOLS/aapt2" dump badging Tagwerk.apk | head -1
+          "$TOOLS/apksigner" verify --print-certs Tagwerk.apk | tee certs.txt
+          # muss der feste Tagwerk-Schlüssel aus signing/tagwerk.jks sein
+          grep -qi "ddd66c74451edfe5f63a9e58b6af3233f704ab23d356eb19fd359add0b9db4a1" certs.txt
+
       - uses: actions/upload-artifact@v4
         with:
           name: Tagwerk-apk
           path: Tagwerk.apk
-
-      - name: Als Download „latest“ veröffentlichen
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release delete latest --cleanup-tag --yes || true
-          gh release create latest Tagwerk.apk \
-            --target "$GITHUB_SHA" \
-            --prerelease \
-            --title "Tagwerk – neueste Version" \
-            --notes "Automatisch gebaut aus ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). APK auf dem Handy herunterladen und installieren."
 
   screenshots:
     needs: build
@@ -74,7 +71,39 @@ jobs:
           name: screenshots
           path: screenshots/
 
-      - name: Screenshots zum Release hinzufügen
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload latest screenshots/*.png --clobber
+  # Erst wenn Build und Emulator-Test durch sind, wird eine neue Version veröffentlicht.
+  # Ältere Releases bleiben bestehen, so bricht der Download-Link nie ab:
+  # https://github.com/<owner>/<repo>/releases/latest/download/Tagwerk.apk
+  release:
+    needs: [build, screenshots]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: 1.0.${{ github.run_number }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Tagwerk-apk
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots
+
+      - name: Version veröffentlichen
+        run: |
+          gh release create "v$VERSION" Tagwerk.apk screenshots/*.png \
+            --target "$GITHUB_SHA" \
+            --title "Tagwerk $VERSION" \
+            --notes "Tagwerk.apk auf dem Handy in Chrome herunterladen und öffnen. Gebaut aus ${GITHUB_REF_NAME} (${GITHUB_SHA::7})." \
+            --latest
+
+      - name: Alte Versionen aufräumen
+        run: |
+          # die neuesten 5 Versionen behalten
+          gh release list --limit 100 --exclude-drafts --json tagName,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[5:] | .[].tagName' \
+            | xargs -r -I{} gh release delete {} --cleanup-tag --yes
+          # frühere Vorab-Version mit festem Tag „latest“ entfernen
+          gh release delete latest --cleanup-tag --yes || true

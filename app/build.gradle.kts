@@ -8,15 +8,32 @@ android {
     namespace = "app.tagwerk"
     compileSdk = 35
 
+    // In GitHub Actions zählt jede Version hoch, damit Updates sich sauber installieren lassen.
+    val buildNumber = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
+
     defaultConfig {
         applicationId = "app.tagwerk"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = buildNumber
+        versionName = "1.0.$buildNumber"
+    }
+
+    // Fester Schlüssel für alle Builds: Updates passen so immer zur installierten App.
+    // Für eine private App liegt er im Repository; siehe README.
+    signingConfigs {
+        create("tagwerk") {
+            storeFile = rootProject.file("signing/tagwerk.jks")
+            storePassword = "tagwerk"
+            keyAlias = "tagwerk"
+            keyPassword = "tagwerk"
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("tagwerk")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -24,8 +41,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // Mit dem Debug-Schlüssel signiert, damit die APK direkt installiert werden kann.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("tagwerk")
         }
     }
 
