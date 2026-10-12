@@ -26,35 +26,43 @@ tap "Neue Aufgabe"
 sleep 2
 adb shell input text "Zahnarzt%sanrufen"
 tap "18:00"
-tap "Gesundheit"
 shot 3-neue-aufgabe
 adb shell input keyevent KEYCODE_BACK   # Tastatur schliessen
 sleep 1
-adb shell input swipe 540 1900 540 700 400
+adb shell input swipe 540 1900 540 900 400
 sleep 1
+tap "Gesundheit"
+shot 3b-neue-aufgabe-unten 1
 tap "Speichern"
 shot 4-gespeichert
+
+echo "--- geplante Alarme ---"
+adb shell dumpsys alarm | grep -B1 -A4 "app.tagwerk" | tee "$OUT/alarms.txt"
+
+# Erinnerung auslösen: Uhr kurz vor 18:00 stellen
+adb shell date 101217592026.50
+sleep 20
+adb shell cmd statusbar expand-notifications
+shot 5-erinnerung 3
+echo "--- Benachrichtigungen ---"
+adb shell dumpsys notification --noredact | grep -A3 "pkg=app.tagwerk" | head -40 | tee "$OUT/notifications.txt"
+adb shell cmd statusbar collapse
+sleep 1
 
 tap "Tag"
 sleep 1
 tap "Abhaken"
-shot 5-tag-nachher
-
-adb shell dumpsys alarm | grep -B1 -A4 "app.tagwerk" > "$OUT/alarms.txt"
-
-# Erinnerung auslösen: Uhr kurz vor 18:00 stellen
-adb shell date 101217592026.55
-sleep 15
-adb shell cmd statusbar expand-notifications
-shot 6-erinnerung 3
-adb shell cmd statusbar collapse
+shot 6-abgehakt 2
 
 # Dunkler Modus
 adb shell cmd uimode night yes
 adb shell am force-stop app.tagwerk
 adb shell am start -W -n app.tagwerk/.MainActivity
 shot 7-dunkel 4
+tap "Alle"
+shot 8-dunkel-alle
 
 adb logcat -d -b crash > "$OUT/crash.txt"
-adb shell dumpsys notification --noredact | grep -A2 "app.tagwerk" | head -40 > "$OUT/notifications.txt"
+echo "--- Abstürze ---"
+cat "$OUT/crash.txt"
 ls -la "$OUT"

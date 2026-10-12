@@ -14,11 +14,19 @@ import app.tagwerk.R
 
 /** Nunito – rund und freundlich, für alle Texte. */
 val Nunito = FontFamily(
-    Font(R.font.nunito, weight = FontWeight.Normal),
-    Font(R.font.nunito, weight = FontWeight.Medium),
-    Font(R.font.nunito, weight = FontWeight.SemiBold),
-    Font(R.font.nunito, weight = FontWeight.Bold),
-    Font(R.font.nunito, weight = FontWeight.ExtraBold),
+    nunito(FontWeight.Normal),
+    nunito(FontWeight.Medium),
+    nunito(FontWeight.SemiBold),
+    nunito(FontWeight.Bold),
+    nunito(FontWeight.ExtraBold),
+)
+
+// Variable Schrift: das Gewicht muss explizit gesetzt werden,
+// sonst wird die (sehr dünne) Standardinstanz verwendet.
+private fun nunito(weight: FontWeight) = Font(
+    R.font.nunito,
+    weight = weight,
+    variationSettings = FontVariation.Settings(FontVariation.weight(weight.weight)),
 )
 
 /** Fraunces mit weicher Achse – für Überschriften. */
