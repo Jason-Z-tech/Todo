@@ -2,6 +2,17 @@
 
 Eine ruhige To-do-App in Pastelltönen – mit Abhaken, Uhrzeiten und Erinnerungen.
 
+## Vorschau
+
+<p>
+  <img src="https://github.com/Jason-Z-tech/Todo/releases/download/latest/1-tag.png" width="200" alt="Tagesansicht" />
+  <img src="https://github.com/Jason-Z-tech/Todo/releases/download/latest/3b-neue-aufgabe-unten.png" width="200" alt="Neue Aufgabe" />
+  <img src="https://github.com/Jason-Z-tech/Todo/releases/download/latest/5-erinnerung.png" width="200" alt="Erinnerung" />
+  <img src="https://github.com/Jason-Z-tech/Todo/releases/download/latest/8-dunkel-alle.png" width="200" alt="Dunkler Modus" />
+</p>
+
+Die Bilder entstehen bei jedem Build automatisch im Android-Emulator.
+
 ## Installieren
 
 1. Auf dem Handy die neueste APK herunterladen:
