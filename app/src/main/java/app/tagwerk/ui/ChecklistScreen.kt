@@ -128,6 +128,9 @@ fun ChecklistScreen(
             entry.kept -> kept.remove(target.task.id)
         }
         onToggle(target)
+        // Wiederholung wieder aufgehakt: Sonst ginge die Serie ab heute weiter und der
+        // überfällige Termin wäre weg – so ist er wieder offen und die Zeile bleibt stehen.
+        if (entry.kept && target.task.isRepeating) onToggle(entry.occurrence)
     }
 
     LazyColumn(
@@ -153,7 +156,9 @@ fun ChecklistScreen(
 
         item(key = "gap") { Spacer(Modifier.height(10.dp)) }
 
-        val showUntimedLabel = plan.untimed.isNotEmpty() && (plan.top.isNotEmpty() || plan.timed.isNotEmpty())
+        // Nur nötig, wenn darüber etwas mit Uhrzeit steht.
+        val showUntimedLabel = plan.untimed.isNotEmpty() &&
+            (plan.timed.isNotEmpty() || plan.top.any { it.occurrence.task.time != null })
         val rows = buildList {
             plan.top.forEach { add(Line.Item(it)) }
             plan.timed.forEach { add(Line.Item(it)) }
@@ -188,7 +193,8 @@ fun ChecklistScreen(
 
         item(key = "hint") {
             Text(
-                "Tippen zum Abhaken · lange drücken zum Bearbeiten",
+                // Geschützte Leerzeichen: Bei wenig Platz wird nur nach dem Punkt umgebrochen.
+                "${keepTogether("Tippen zum Abhaken")} · ${keepTogether("lange drücken zum Bearbeiten")}",
                 style = MaterialTheme.typography.bodySmall,
                 color = Tagwerk.palette.muted.copy(alpha = 0.8f),
                 textAlign = TextAlign.Center,
@@ -338,10 +344,11 @@ private fun ChecklistHeader(
 @Composable
 private fun DaySwitcher(day: LocalDate, today: LocalDate, onDayChange: (LocalDate) -> Unit) {
     val p = Tagwerk.palette
+    // 28 dp = Radius der Pfeilknöpfe + Innenabstand, damit die Rundungen parallel laufen.
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(28.dp))
             .background(p.chip)
             .padding(4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -385,15 +392,29 @@ private fun DaySwitcher(day: LocalDate, today: LocalDate, onDayChange: (LocalDat
     }
 }
 
-/** Zweite Zeile im Umschalter: das ganze Datum – oder wie weit der Tag entfernt ist. */
+/**
+ * Zweite Zeile im Umschalter: das ganze Datum – oder wie weit der Tag entfernt ist.
+ * Liegt der Tag in einem anderen Jahr, steht die Jahreszahl dabei.
+ */
 private fun dayHint(day: LocalDate, today: LocalDate): String {
     val diff = ChronoUnit.DAYS.between(today, day)
+    val year = if (day.year != today.year) day.year else null
     return when {
-        diff in -1L..1L -> formatLongDate(day)
-        diff > 0 -> "in $diff Tagen"
-        else -> "vor ${-diff} Tagen"
+        diff in -1L..1L -> formatLongDate(day) + (year?.let { " $it" } ?: "")
+        diff > 0 -> "in $diff Tagen" + (year?.let { " · $it" } ?: "")
+        else -> "vor ${-diff} Tagen" + (year?.let { " · $it" } ?: "")
     }
 }
+
+/** Wie [formatDay], aber mit Jahreszahl, wenn der Tag nicht in diesem Jahr liegt (z. B. „Sa, 20. Dez. 2025“). */
+private fun dayWithYear(day: LocalDate, today: LocalDate): String {
+    val label = formatDay(day, today)
+    val near = ChronoUnit.DAYS.between(today, day) in -1L..1L
+    return if (near || day.year == today.year) label else "$label ${day.year}"
+}
+
+/** Leerzeichen, an denen nicht umgebrochen werden soll. */
+private fun keepTogether(text: String): String = text.replace(' ', '\u00A0')
 
 @Composable
 private fun ArrowButton(icon: ImageVector, description: String, onClick: () -> Unit) {
@@ -465,7 +486,9 @@ private fun ChecklistRow(
     var shownChecked by remember(entry.key, checked) { mutableStateOf(checked) }
     var busy by remember(entry.key, checked) { mutableStateOf(false) }
 
-    val lineHeight = with(LocalDensity.current) { MaterialTheme.typography.bodyLarge.lineHeight.toDp() }
+    // Höhe der ersten Titelzeile: Kästchen, Stern und Punkt sitzen mittig dazu.
+    val titleLine = MaterialTheme.typography.bodyLarge.lineHeight
+    val lineHeight = with(LocalDensity.current) { if (titleLine.isSp) titleLine.toDp() else 22.dp }
     val firstLine = maxOf(lineHeight, 24.dp)
     val titleColor by animateColorAsState(if (shownChecked) p.muted else p.ink, label = "title")
     val overdueSince = when {
@@ -535,7 +558,8 @@ private fun ChecklistRow(
             Column(
                 Modifier
                     .weight(1f)
-                    .alignByBaseline(),
+                    .alignByBaseline()
+                    .padding(top = (firstLine - lineHeight) / 2),
             ) {
                 Text(
                     task.title,
@@ -548,10 +572,11 @@ private fun ChecklistRow(
                 if (overdueSince != null) {
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        if (overdueSince == day) "Überfällig" else "Überfällig · ${formatDay(overdueSince, today)}",
+                        // Das Datum bricht nur als Ganzes um, nicht mitten drin.
+                        if (overdueSince == day) "Überfällig" else "Überfällig · ${keepTogether(dayWithYear(overdueSince, today))}",
                         style = MaterialTheme.typography.labelMedium,
                         color = if (shownChecked) p.muted else p.danger,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
