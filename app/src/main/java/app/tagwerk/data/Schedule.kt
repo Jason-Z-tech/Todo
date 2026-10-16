@@ -53,7 +53,11 @@ fun Task.occurrences(start: LocalDate, end: LocalDate, today: LocalDate): List<O
 
     doneDates.filter { it in start..end }.sorted().forEach { out += Occurrence(this, it, Occurrence.Kind.DONE) }
     val first = date ?: return out
-    if (done) return out
+    if (done) {
+        // Sonderfall: erledigt und erst danach auf „Wiederholen“ gestellt
+        doneDay()?.takeIf { it in start..end && it !in doneDates }?.let { out += Occurrence(this, it, Occurrence.Kind.DONE) }
+        return out
+    }
     if (first in start..end && first !in doneDates) out += Occurrence(this, first, Occurrence.Kind.OPEN)
 
     var d = nextAfter(first)

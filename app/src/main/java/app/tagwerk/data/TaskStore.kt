@@ -72,7 +72,7 @@ class TaskStore private constructor(context: Context) {
                 task.copy(doneDates = trimmed(task.doneDates + day)).also { save(it) }
             }
             Occurrence.Kind.DONE -> {
-                if (!task.isRepeating) return setDone(task.id, false)
+                if (!task.isRepeating || task.done) return setDone(task.id, false)
                 val date = task.date
                 task.copy(
                     doneDates = task.doneDates - day,

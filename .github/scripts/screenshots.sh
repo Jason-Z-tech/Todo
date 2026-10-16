@@ -58,6 +58,24 @@ sleep 1
 tap "Abhaken"
 shot 6-abgehakt 2
 
+# Neue Bereiche: Kalender (Monat/Woche/Tag), Checkliste, Einstellungen
+tap "Kalender"
+shot 9-kalender-monat
+tap "Woche"
+shot 10-kalender-woche
+tap "Tag"
+shot 11-kalender-tag
+tap "Checkliste"
+shot 12-checkliste
+tap "Einstellungen"
+shot 13-einstellungen
+tap "Flieder"
+shot 14-thema-flieder
+tap "Pfirsich"
+sleep 1
+tap "Aufgaben"
+sleep 1
+
 # Dunkler Modus
 adb shell cmd uimode night yes
 adb shell am force-stop app.tagwerk
@@ -65,6 +83,8 @@ adb shell am start -W -n app.tagwerk/.MainActivity
 shot 7-dunkel 4
 tap "Alle"
 shot 8-dunkel-alle
+tap "Kalender"
+shot 15-dunkel-kalender
 
 adb logcat -d -b crash > "$OUT/crash.txt"
 echo "--- Abstürze ---"
