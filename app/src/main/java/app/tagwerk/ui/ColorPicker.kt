@@ -7,11 +7,14 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
@@ -99,8 +104,9 @@ fun ColorPickerDialog(
 ) {
     val p = Tagwerk.palette
     val start = remember { initial.copy(alpha = 1f) }
-    var hsl by remember { mutableStateOf(start.toHsl()) }
-    var hex by remember { mutableStateOf(colorToHex(start.toArgb())) }
+    // Der Farbcode übersteht auch das Drehen des Handys; die Regler folgen ihm.
+    var hex by rememberSaveable { mutableStateOf(colorToHex(start.toArgb())) }
+    var hsl by remember { mutableStateOf(parseColor(hex)?.let { Color(it).toHsl() } ?: start.toHsl()) }
     val parsed = parseColor(hex)
     val color = if (parsed != null) Color(parsed) else hsl.toColor()
     val darkInk = if (p.isDark) p.background else p.ink
@@ -111,8 +117,10 @@ fun ColorPickerDialog(
     }
 
     fun type(text: String) {
-        hex = text.take(9)
-        val argb = parseColor(text) ?: return
+        // Leerzeichen (z. B. beim Einfügen) fallen weg; Regler folgen genau dem, was im Feld steht.
+        val clean = text.filterNot { it.isWhitespace() }.take(9)
+        hex = clean
+        val argb = parseColor(clean) ?: return
         val typed = Color(argb).toHsl()
         // Bei Grautönen bleibt der Farbton stehen, damit der Regler nicht springt.
         hsl = if (typed.saturation < 0.002f) typed.copy(hue = hsl.hue) else typed
@@ -248,11 +256,18 @@ private fun ColorSlider(
                     fun at(x: Float) = ((x - r) / (size.width - 2 * r).coerceAtLeast(1f)).coerceIn(0f, 1f)
                     awaitEachGesture {
                         val down = awaitFirstDown()
-                        down.consume()
-                        change(at(down.position.x))
-                        drag(down.id) { move ->
-                            move.consume()
-                            change(at(move.position.x))
+                        // Gezogen wird erst nach einer waagrechten Bewegung –
+                        // senkrechtes Wischen scrollt den Dialog und lässt die Farbe in Ruhe.
+                        val drag = awaitHorizontalTouchSlopOrCancellation(down.id) { move, _ -> move.consume() }
+                        if (drag != null) {
+                            change(at(drag.position.x))
+                            horizontalDrag(drag.id) { move ->
+                                move.consume()
+                                change(at(move.position.x))
+                            }
+                        } else if (currentEvent.changes.any { it.id == down.id && it.changedToUp() }) {
+                            // Einfaches Tippen springt an die Stelle.
+                            change(at(down.position.x))
                         }
                     }
                 },
@@ -346,7 +361,11 @@ internal fun PickerDialogFrame(onDismiss: () -> Unit, content: @Composable Colum
     }
 }
 
-/** „Abbrechen“ und ein gefüllter Bestätigen-Knopf, rechtsbündig. */
+/**
+ * „Abbrechen“ und ein gefüllter Bestätigen-Knopf, rechtsbündig. Reicht der Platz
+ * nicht (große Schrift), rutscht der Knopf in die nächste Zeile statt abgeschnitten zu werden.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PickerDialogActions(
     confirm: String,
@@ -357,17 +376,16 @@ internal fun PickerDialogActions(
     confirmContent: Color = Tagwerk.palette.onAccent,
 ) {
     val p = Tagwerk.palette
-    Row(
+    FlowRow(
         Modifier
             .fillMaxWidth()
             .padding(top = 22.dp),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        TextButton(onClick = onDismiss) {
+        TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.CenterVertically)) {
             Text("Abbrechen", style = MaterialTheme.typography.labelLarge, color = p.muted, maxLines = 1)
         }
-        Spacer(Modifier.width(6.dp))
         Surface(
             onClick = onConfirm,
             enabled = enabled,

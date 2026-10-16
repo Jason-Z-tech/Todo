@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,25 +73,27 @@ fun ListEditDialog(
     val defaultColor = remember {
         ListColors.firstOrNull { c -> lists.none { it.color == c } } ?: ListColors.first()
     }
-    var name by remember { mutableStateOf(initial?.name ?: "") }
-    var color by remember { mutableStateOf(initial?.color ?: defaultColor) }
-    var picking by remember { mutableStateOf(false) }
+    // Eingaben überstehen das Drehen des Handys, wie der offene Dialog selbst.
+    var name by rememberSaveable { mutableStateOf(initial?.name ?: "") }
+    var color by rememberSaveable { mutableStateOf(initial?.color ?: defaultColor) }
+    var picking by rememberSaveable { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        if (initial == null) runCatching { focus.requestFocus() }
-    }
 
     val canSave = name.isNotBlank()
     val preview = TaskList(id = initial?.id ?: "neu", name = name.trim(), color = color)
     val custom = color !in ListColors
 
     PickerDialogFrame(onDismiss = onDismiss) {
+        // Fokus erst im Dialog selbst anfordern – erst dort hängt das Feld am FocusRequester.
+        LaunchedEffect(Unit) {
+            if (initial == null) runCatching { focus.requestFocus() }
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 if (initial == null) "Neue Liste" else "Liste bearbeiten",
                 style = MaterialTheme.typography.titleLarge,
                 color = p.ink,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
@@ -142,15 +145,10 @@ fun ListEditDialog(
 
         PickerLabel("Vorschau")
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 2.dp)) {
-            // In der Listenauswahl steht der Name einzeilig – sehr lange Namen hier gekürzt zeigen.
-            val shown = preview.name.ifEmpty { "Deine Liste" }
-            Pill(
-                text = if (shown.length > 24) shown.take(23).trimEnd() + "…" else shown,
-                selected = true,
-                onClick = {},
-                enabled = false,
-                selectedColor = preview.soft(),
-                selectedContent = preview.strong(),
+            PreviewPill(
+                text = preview.name.ifEmpty { "Deine Liste" },
+                color = preview.soft(),
+                content = preview.strong(),
                 modifier = Modifier.weight(1f, fill = false),
             )
             Spacer(Modifier.width(14.dp))
@@ -183,6 +181,20 @@ fun ListEditDialog(
                 color = it.toArgb()
                 picking = false
             },
+        )
+    }
+}
+
+/** Vorschau im Stil der ausgewählten [Pill] – nicht antippbar, lange Namen enden einzeilig mit „…“. */
+@Composable
+private fun PreviewPill(text: String, color: Color, content: Color, modifier: Modifier = Modifier) {
+    Surface(modifier = modifier, shape = CircleShape, color = color, contentColor = content) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
         )
     }
 }

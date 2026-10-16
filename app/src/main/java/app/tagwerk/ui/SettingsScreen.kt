@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,6 +43,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -118,6 +120,7 @@ fun SettingsScreen(
                         },
                         placeholder = "Dein Name",
                         label = "Wie soll ich dich nennen?",
+                        capitalization = KeyboardCapitalization.Words,
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
@@ -138,7 +141,7 @@ fun SettingsScreen(
         item(key = "h-theme") { SettingsLabel("Farbthema") }
         item(key = "theme") {
             SettingsCard {
-                Column(Modifier.padding(horizontal = 8.dp, vertical = 12.dp)) {
+                Column(Modifier.padding(horizontal = 8.dp, vertical = 12.dp).selectableGroup()) {
                     val swatches = ThemePreset.entries.map { it as ThemePreset? } + null
                     swatches.chunked(4).forEach { row ->
                         Row(Modifier.fillMaxWidth()) {
@@ -159,6 +162,8 @@ fun SettingsScreen(
                                     ) { CustomCircle(if (customAccent) Color(settings.accent) else null) }
                                 }
                             }
+                            // Unvollständige Reihe auffüllen, damit alle Kreise in ihren Spalten bleiben.
+                            repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                     Text(
