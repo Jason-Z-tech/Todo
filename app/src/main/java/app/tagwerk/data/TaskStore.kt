@@ -49,7 +49,7 @@ class TaskStore private constructor(context: Context) {
     fun setDone(id: Long, done: Boolean): Task? {
         val task = find(id) ?: return null
         val updated = if (done && task.isRepeating) {
-            completeRepeating(task)
+            completeRepeating(task, LocalDate.now())
         } else {
             task.copy(done = done, completedAt = if (done) System.currentTimeMillis() else null)
         }
@@ -66,7 +66,13 @@ class TaskStore private constructor(context: Context) {
         val task = find(occurrence.task.id) ?: return null
         val day = occurrence.date
         return when (occurrence.kind) {
-            Occurrence.Kind.OPEN -> setDone(task.id, true)
+            Occurrence.Kind.OPEN -> {
+                if (!task.isRepeating) return setDone(task.id, true)
+                completeRepeating(task, occurrence.countsFor).also {
+                    save(it)
+                    Notifications.dismiss(appContext, task.id)
+                }
+            }
             Occurrence.Kind.UPCOMING -> {
                 if (!task.isRepeating) return setDone(task.id, true)
                 task.copy(doneDates = trimmed(task.doneDates + day)).also { save(it) }
@@ -83,11 +89,10 @@ class TaskStore private constructor(context: Context) {
         }
     }
 
-    private fun completeRepeating(task: Task): Task {
+    /** Hakt den aktuellen Termin ab – gezählt für den Tag [on] – und springt zum nächsten offenen. */
+    private fun completeRepeating(task: Task, on: LocalDate): Task {
         val date = task.date ?: return task
-        val today = LocalDate.now()
-        // Überfälliges zählt als heute erledigt.
-        val day = maxOf(date, today)
+        val day = maxOf(date, on)
         val doneDates = task.doneDates + day
         var next = task.nextAfter(date)
         var steps = 0

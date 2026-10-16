@@ -42,6 +42,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.tagwerk.ui.theme.Tagwerk
@@ -74,7 +75,7 @@ fun Pill(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (icon != null) Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
-            Text(text, style = MaterialTheme.typography.labelLarge)
+            Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

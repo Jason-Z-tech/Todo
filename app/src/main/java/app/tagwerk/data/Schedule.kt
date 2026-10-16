@@ -1,6 +1,7 @@
 package app.tagwerk.data
 
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 /**
  * Wie eine Aufgabe an einem bestimmten Tag erscheint. Wiederkehrende Aufgaben
@@ -11,6 +12,11 @@ data class Occurrence(
     val task: Task,
     val date: LocalDate,
     val kind: Kind,
+    /**
+     * Für welchen Tag das Abhaken zählt. Überfälliges in der Heute-Ansicht zählt
+     * als heute erledigt; auf einer vergangenen Kalender-/Checklistenseite für genau diesen Tag.
+     */
+    val countsFor: LocalDate = date,
 ) {
     enum class Kind {
         /** Der aktuelle, offene Termin (bei Überfälligem in der Vergangenheit). */
@@ -61,6 +67,18 @@ fun Task.occurrences(start: LocalDate, end: LocalDate, today: LocalDate): List<O
     if (first in start..end && first !in doneDates) out += Occurrence(this, first, Occurrence.Kind.OPEN)
 
     var d = nextAfter(first)
+    // Schneller Vorlauf bis kurz vor den Zeitraum – sonst bräche eine tägliche Serie
+    // weit in der Zukunft an MAX_STEPS ab.
+    val from = maxOf(today, start.minusDays(1))
+    if (d.isBefore(from)) {
+        d = when {
+            repeat == Repeat.DAILY || repeat == Repeat.WEEKDAYS -> nextAfter(from)
+            repeat == Repeat.DAYS && repeatDays.isNotEmpty() -> nextAfter(from)
+            repeat == Repeat.WEEKLY || repeat == Repeat.DAYS ->
+                first.plusWeeks(ChronoUnit.DAYS.between(first, from) / 7 + 1)
+            else -> d
+        }
+    }
     var steps = 0
     while (!d.isAfter(end) && steps < MAX_STEPS) {
         if (d.isAfter(today) && !d.isBefore(start) && d !in doneDates) {
@@ -83,7 +101,7 @@ fun List<Task>.occurrencesBetween(start: LocalDate, end: LocalDate, today: Local
 /** Offene Termine vor [today] – erscheinen „heute“ als überfällig. */
 fun List<Task>.overdueOccurrences(today: LocalDate): List<Occurrence> =
     filter { it.isOverdue(today) }
-        .map { Occurrence(it, it.date!!, Occurrence.Kind.OPEN) }
+        .map { Occurrence(it, it.date!!, Occurrence.Kind.OPEN, countsFor = today) }
         .sortedBy { it.date }
 
 /** Uhrzeit zuerst (früh → spät), ohne Uhrzeit ganz unten; dann Wichtiges, dann Reihenfolge des Anlegens. */

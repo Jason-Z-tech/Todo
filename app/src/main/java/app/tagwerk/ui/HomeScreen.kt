@@ -60,6 +60,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,7 +68,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.tagwerk.data.Occurrence
@@ -194,6 +197,8 @@ fun TagwerkApp() {
     }
 
     val showFab = tab != AppTab.SETTINGS
+    // Jeder Bereich behält beim Wechseln seine Ansicht und Scrollposition.
+    val tabStates = rememberSaveableStateHolder()
 
     Scaffold(
         containerColor = p.background,
@@ -215,57 +220,59 @@ fun TagwerkApp() {
             top = padding.calculateTopPadding(),
             bottom = padding.calculateBottomPadding() + if (showFab) 96.dp else 16.dp,
         )
-        when (tab) {
-            AppTab.TASKS -> TasksTab(
-                tasks = tasks,
-                visible = visible,
-                today = today,
-                mode = mode,
-                onMode = { mode = it },
-                selectedDay = selectedDay,
-                onSelectDay = { selectedDay = it },
-                filter = filter,
-                onFilter = { filterId = it?.id },
-                onEditLists = { tab = AppTab.SETTINGS },
-                doneExpanded = doneExpanded,
-                onDoneExpanded = { doneExpanded = it },
-                onToggle = ::toggle,
-                onOpen = { open(it) },
-                onDelete = ::delete,
-                onClearCompleted = { store.clearCompleted() },
-                contentPadding = contentPadding,
-            )
+        tabStates.SaveableStateProvider(tab.name) {
+            when (tab) {
+                AppTab.TASKS -> TasksTab(
+                    tasks = tasks,
+                    visible = visible,
+                    today = today,
+                    mode = mode,
+                    onMode = { mode = it },
+                    selectedDay = selectedDay,
+                    onSelectDay = { selectedDay = it },
+                    filter = filter,
+                    onFilter = { filterId = it?.id },
+                    onEditLists = { tab = AppTab.SETTINGS },
+                    doneExpanded = doneExpanded,
+                    onDoneExpanded = { doneExpanded = it },
+                    onToggle = ::toggle,
+                    onOpen = { open(it) },
+                    onDelete = ::delete,
+                    onClearCompleted = { store.clearCompleted() },
+                    contentPadding = contentPadding,
+                )
 
-            AppTab.CALENDAR -> CalendarScreen(
-                tasks = tasks,
-                today = today,
-                selected = calendarDay,
-                onSelect = { calendarDay = it },
-                onToggle = ::toggle,
-                onOpen = { open(it) },
-                contentPadding = contentPadding,
-            )
+                AppTab.CALENDAR -> CalendarScreen(
+                    tasks = tasks,
+                    today = today,
+                    selected = calendarDay,
+                    onSelect = { calendarDay = it },
+                    onToggle = ::toggle,
+                    onOpen = { open(it) },
+                    contentPadding = contentPadding,
+                )
 
-            AppTab.CHECKLIST -> ChecklistScreen(
-                tasks = tasks,
-                today = today,
-                day = checklistDay,
-                onDayChange = { checklistDay = it },
-                onToggle = ::toggle,
-                onOpen = { open(it) },
-                contentPadding = contentPadding,
-            )
+                AppTab.CHECKLIST -> ChecklistScreen(
+                    tasks = tasks,
+                    today = today,
+                    day = checklistDay,
+                    onDayChange = { checklistDay = it },
+                    onToggle = ::toggle,
+                    onOpen = { open(it) },
+                    contentPadding = contentPadding,
+                )
 
-            AppTab.SETTINGS -> SettingsScreen(
-                settings = settings,
-                tasks = tasks,
-                onNameChange = settingsStore::setName,
-                onAccentChange = settingsStore::setAccent,
-                onSaveList = settingsStore::saveList,
-                onDeleteList = ::deleteList,
-                newListId = settingsStore::newListId,
-                contentPadding = contentPadding,
-            )
+                AppTab.SETTINGS -> SettingsScreen(
+                    settings = settings,
+                    tasks = tasks,
+                    onNameChange = settingsStore::setName,
+                    onAccentChange = settingsStore::setAccent,
+                    onSaveList = settingsStore::saveList,
+                    onDeleteList = ::deleteList,
+                    newListId = settingsStore::newListId,
+                    contentPadding = contentPadding,
+                )
+            }
         }
     }
 
@@ -351,7 +358,11 @@ private fun TasksTab(
                 SwipeableTaskCard(
                     task = task,
                     showDate = showDate || task.isOverdue(today),
-                    onToggle = { onToggle(Occurrence(task, task.date ?: today, if (task.done) Occurrence.Kind.DONE else Occurrence.Kind.OPEN)) },
+                    onToggle = {
+                        val date = task.date ?: today
+                        val kind = if (task.done) Occurrence.Kind.DONE else Occurrence.Kind.OPEN
+                        onToggle(Occurrence(task, date, kind, countsFor = maxOf(date, today)))
+                    },
                     onOpen = { onOpen(task) },
                     onDelete = { onDelete(task) },
                     modifier = Modifier.animateItem(),
@@ -482,7 +493,16 @@ private fun BottomTabs(tab: AppTab, onSelect: (AppTab) -> Unit) {
                     selected = t == tab,
                     onClick = { onSelect(t) },
                     icon = { Icon(t.icon, contentDescription = null) },
-                    label = { Text(t.label, style = MaterialTheme.typography.labelMedium, maxLines = 1) },
+                    // etwas kleiner, damit „Einstellungen“ auch auf schmalen Handys ganz passt
+                    label = {
+                        Text(
+                            t.label,
+                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp, letterSpacing = 0.sp),
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = p.ink,
                         selectedTextColor = p.ink,

@@ -18,7 +18,7 @@ internal object TaskJson {
         val array = JSONObject(text).optJSONArray("tasks") ?: return emptyList()
         return (0 until array.length()).mapNotNull { i ->
             runCatching { decode(array.getJSONObject(i)) }.getOrNull()
-        }
+        }.distinctBy { it.id } // doppelte IDs würden die Listen-Ansichten zum Absturz bringen
     }
 
     private fun encode(t: Task): JSONObject = JSONObject().apply {

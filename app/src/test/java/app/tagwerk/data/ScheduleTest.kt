@@ -103,4 +103,46 @@ class ScheduleTest {
         val all = task.occurrences(monday.minusDays(1), monday.plusDays(40), today = monday)
         assertEquals(all.size, all.map { it.key }.toSet().size)
     }
+
+    @Test
+    fun `taegliche Serie erscheint auch Jahre spaeter`() {
+        val task = Task(id = 1, title = "Gießen", date = monday, repeat = Repeat.DAILY)
+        val later = monday.plusYears(6)
+        assertEquals(7, task.occurrences(later, later.plusDays(6), today = monday).size)
+    }
+
+    @Test
+    fun `woechentliche Serie bleibt beim Vorlauf auf ihrem Wochentag`() {
+        val wednesday = monday.plusDays(2)
+        val task = Task(id = 1, title = "Chor", date = wednesday, repeat = Repeat.WEEKLY)
+        val later = monday.plusYears(3)
+        val result = task.occurrences(later, later.plusDays(13), today = monday)
+        assertEquals(2, result.size)
+        assertTrue(result.all { it.date.dayOfWeek == java.time.DayOfWeek.WEDNESDAY })
+        // gleiche Ergebnisse wie Schritt für Schritt
+        var d = wednesday
+        val expected = mutableListOf<LocalDate>()
+        while (!d.isAfter(later.plusDays(13))) { if (!d.isBefore(later)) expected += d; d = d.plusWeeks(1) }
+        assertEquals(expected, result.map { it.date })
+    }
+
+    @Test
+    fun `bestimmte Tage beim Vorlauf`() {
+        val task = Task(id = 1, title = "Sport", date = monday, repeat = Repeat.DAYS, repeatDays = setOf(MONDAY, THURSDAY))
+        val later = monday.plusYears(2)
+        val result = task.occurrences(later, later.plusDays(6), today = monday)
+        assertEquals(setOf(MONDAY, THURSDAY), result.map { it.date.dayOfWeek }.toSet())
+        assertEquals(2, result.size)
+    }
+
+    @Test
+    fun `Ueberfaelliges von heute aus zaehlt fuer heute`() {
+        val task = Task(id = 1, title = "x", date = monday, repeat = Repeat.DAILY)
+        val today = monday.plusDays(2)
+        val o = listOf(task).overdueOccurrences(today).single()
+        assertEquals(monday, o.date)
+        assertEquals(today, o.countsFor)
+        // im Kalender am ursprünglichen Tag zählt es für diesen Tag
+        assertEquals(monday, task.occurrences(monday, monday, today).single().countsFor)
+    }
 }
