@@ -161,8 +161,9 @@ fun TagwerkTheme(
     val p = remember(accent, dark) { paletteFor(accent, dark) }
     val scheme = if (dark) {
         darkColorScheme(
-            primary = p.accent,
-            onPrimary = p.onAccent,
+            // accentStrong statt accent: bleibt auch bei dunklen eigenen Farben sichtbar (z. B. „OK“ in Dialogen)
+            primary = p.accentStrong,
+            onPrimary = p.accentStrong.readableInk(Color(0xFF2B2124)),
             primaryContainer = p.accentSoft,
             onPrimaryContainer = p.ink,
             secondaryContainer = p.accentSoft,

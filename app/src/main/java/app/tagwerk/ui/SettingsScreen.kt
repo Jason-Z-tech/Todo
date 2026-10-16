@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -30,9 +31,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -56,6 +60,7 @@ import app.tagwerk.ui.theme.Tagwerk
 import app.tagwerk.ui.theme.readableInk
 import app.tagwerk.ui.theme.soft
 import app.tagwerk.ui.theme.strong
+import kotlinx.coroutines.delay
 
 /**
  * Einstellungen: Name für die Begrüßung, Farbthema (fertig oder eigene Farbe) und Listen.
@@ -86,8 +91,21 @@ fun SettingsScreen(
     }
     val customAccent = ThemePreset.entries.none { it.accent == settings.accent }
 
+    // Den Namen erst nach einer kurzen Tipp-Pause speichern (nicht bei jedem Buchstaben
+    // die Datei schreiben) – beim Verlassen des Bereichs auf jeden Fall.
+    val latestName by rememberUpdatedState(name)
+    val saveName by rememberUpdatedState(onNameChange)
+    LaunchedEffect(name) {
+        delay(400)
+        saveName(name)
+    }
+    DisposableEffect(Unit) {
+        onDispose { saveName(latestName) }
+    }
+
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        // Tastatur im Querformat: Liste endet über der Tastatur, das Feld bleibt sichtbar.
+        modifier = modifier.fillMaxSize().imePadding(),
         contentPadding = contentPadding,
     ) {
         item(key = "title") {
@@ -114,10 +132,7 @@ fun SettingsScreen(
                 Column(Modifier.padding(14.dp)) {
                     SoftInputField(
                         value = name,
-                        onValueChange = {
-                            name = it.take(40)
-                            onNameChange(name)
-                        },
+                        onValueChange = { name = it.take(40) },
                         placeholder = "Dein Name",
                         label = "Wie soll ich dich nennen?",
                         capitalization = KeyboardCapitalization.Words,
@@ -448,6 +463,7 @@ private fun DeleteListDialog(
         Text(
             when {
                 total == 0 -> "Die Liste ist leer – es gehen keine Aufgaben verloren."
+                open == 0 && total == 1 -> "Die erledigte Aufgabe wandert in die Liste „${target.name}“."
                 open == 0 -> "Die erledigten Aufgaben wandern in die Liste „${target.name}“."
                 open == 1 -> "Die offene Aufgabe wandert in die Liste „${target.name}“."
                 else -> "Die $open offenen Aufgaben wandern in die Liste „${target.name}“."

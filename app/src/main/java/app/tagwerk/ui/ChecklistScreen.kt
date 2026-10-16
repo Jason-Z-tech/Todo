@@ -43,7 +43,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -105,12 +104,12 @@ fun ChecklistScreen(
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
-    // Überfälliges, das hier abgehakt wurde (Aufgabe → ursprünglicher Tag). Es zählt dann als
-    // heute erledigt, bleibt aber oben stehen, bis man den Tag wechselt.
+    // Überfälliges, das hier abgehakt wurde (Aufgabe → ursprünglicher Tag). Es bleibt
+    // abgehakt oben stehen, bis man den Tag wechselt.
     val kept = remember(day, today) { mutableStateMapOf<Long, LocalDate>() }
     val keptNow = kept.toMap()
     val plan = remember(tasks, day, today, keptNow) { planDay(tasks, day, today, keptNow) }
-    val scope = rememberCoroutineScope()
+    val scope = rememberTickScope()
 
     val timeStyle = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum")
     val measurer = rememberTextMeasurer()
@@ -128,9 +127,6 @@ fun ChecklistScreen(
             entry.kept -> kept.remove(target.task.id)
         }
         onToggle(target)
-        // Wiederholung wieder aufgehakt: Sonst ginge die Serie ab heute weiter und der
-        // überfällige Termin wäre weg – so ist er wieder offen und die Zeile bleibt stehen.
-        if (entry.kept && target.task.isRepeating) onToggle(entry.occurrence)
     }
 
     LazyColumn(
@@ -208,7 +204,7 @@ fun ChecklistScreen(
 
 /**
  * Ein Eintrag der Checkliste. [target] ist der Termin, auf den das Abhaken wirkt –
- * bei stehengebliebenem Überfälligem ([kept]) der heute erledigte Tag.
+ * bei stehengebliebenem Überfälligem ([kept]) der abgehakte Tag (bei einmaligen Aufgaben heute).
  */
 private data class Entry(
     val occurrence: Occurrence,
@@ -239,18 +235,19 @@ private fun planDay(tasks: List<Task>, day: LocalDate, today: LocalDate, kept: M
 
     val keptEntries = kept.mapNotNull { (id, date) ->
         val task = byId[id] ?: return@mapNotNull null
-        val doneToday = if (task.isRepeating) today in task.doneDates else task.done && task.doneDay() == today
-        if (id in stillOpen || !doneToday) return@mapNotNull null
+        // Serien buchen den verpassten Tag selbst, einmalige Aufgaben gelten als heute erledigt.
+        val bookedOn = if (task.isRepeating) date.takeIf { it in task.doneDates } else today.takeIf { task.done && task.doneDay() == today }
+        if (id in stillOpen || bookedOn == null) return@mapNotNull null
         Entry(
             occurrence = Occurrence(task, date, Occurrence.Kind.DONE),
-            target = Occurrence(task, today, Occurrence.Kind.DONE),
+            target = Occurrence(task, bookedOn, Occurrence.Kind.DONE),
             kept = true,
         )
     }
     val keptIds = keptEntries.map { it.occurrence.task.id }.toSet()
-    // Der heute erledigte Termin wird schon von der stehengebliebenen Zeile gezeigt.
+    // Eine heute erledigte einmalige Aufgabe zeigt schon die stehengebliebene Zeile.
     val dayEntries = onDay
-        .filterNot { it.done && it.date == today && it.task.id in keptIds }
+        .filterNot { it.done && it.date == today && it.task.id in keptIds && !it.task.isRepeating }
         .map { Entry(it) }
 
     val top: List<Entry>

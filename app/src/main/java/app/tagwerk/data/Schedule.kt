@@ -13,8 +13,9 @@ data class Occurrence(
     val date: LocalDate,
     val kind: Kind,
     /**
-     * Für welchen Tag das Abhaken zählt. Überfälliges in der Heute-Ansicht zählt
-     * als heute erledigt; auf einer vergangenen Kalender-/Checklistenseite für genau diesen Tag.
+     * Ab welchem Tag eine Serie nach dem Abhaken weiterläuft. Überfälliges, das von
+     * heute aus abgehakt wird, springt auf den nächsten Termin ab heute (der heutige bleibt
+     * offen); auf einer vergangenen Kalender-/Checklistenseite geht es direkt danach weiter.
      */
     val countsFor: LocalDate = date,
 ) {

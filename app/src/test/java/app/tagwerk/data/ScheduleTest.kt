@@ -136,7 +136,7 @@ class ScheduleTest {
     }
 
     @Test
-    fun `Ueberfaelliges von heute aus zaehlt fuer heute`() {
+    fun `Ueberfaelliges von heute aus laeuft ab heute weiter`() {
         val task = Task(id = 1, title = "x", date = monday, repeat = Repeat.DAILY)
         val today = monday.plusDays(2)
         val o = listOf(task).overdueOccurrences(today).single()

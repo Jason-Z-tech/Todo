@@ -54,6 +54,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,12 +67,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.tagwerk.data.Occurrence
 import app.tagwerk.data.SettingsStore
@@ -129,9 +132,36 @@ fun TagwerkApp() {
 
     var tab by rememberSaveable { mutableStateOf(AppTab.TASKS) }
     var mode by rememberSaveable { mutableStateOf(ViewMode.DAY) }
-    var selectedDay by rememberSaveable { mutableStateOf(LocalDate.now()) }
-    var calendarDay by rememberSaveable { mutableStateOf(LocalDate.now()) }
-    var checklistDay by rememberSaveable { mutableStateOf(LocalDate.now()) }
+    // „Heute“ wird beim Zurückkehren in die App und bei jedem Tippen auf Tabs/Aufgaben
+    // aufgefrischt – so stimmt es auch am nächsten Morgen, ohne dass die App neu startet.
+    var today by remember { mutableStateOf(LocalDate.now()) }
+    fun refreshToday() {
+        val now = LocalDate.now()
+        if (now != today) today = now
+    }
+    LifecycleResumeEffect(Unit) {
+        refreshToday()
+        onPauseOrDispose { }
+    }
+    // Gewählte Tage; null = folgt „heute“. Sie gelten nur für den Tag, an dem sie gewählt
+    // wurden – an einem neuen Tag zeigen alle Bereiche wieder heute.
+    var selectedPick by rememberSaveable { mutableStateOf<LocalDate?>(null) }
+    var calendarPick by rememberSaveable { mutableStateOf<LocalDate?>(null) }
+    var checklistPick by rememberSaveable { mutableStateOf<LocalDate?>(null) }
+    var picksFor by rememberSaveable { mutableStateOf(today) }
+    val picksValid = picksFor == today
+    val selectedDay = selectedPick?.takeIf { picksValid } ?: today
+    val calendarDay = calendarPick?.takeIf { picksValid } ?: today
+    val checklistDay = checklistPick?.takeIf { picksValid } ?: today
+    fun pick(day: LocalDate): LocalDate? {
+        if (!picksValid) {
+            selectedPick = null
+            calendarPick = null
+            checklistPick = null
+            picksFor = today
+        }
+        return day.takeIf { it != today }
+    }
     var filterId by rememberSaveable { mutableStateOf<String?>(null) }
     var doneExpanded by rememberSaveable { mutableStateOf(false) }
 
@@ -146,7 +176,6 @@ fun TagwerkApp() {
     // Zurück führt von den anderen Bereichen erst zur Startseite.
     BackHandler(enabled = tab != AppTab.TASKS) { tab = AppTab.TASKS }
 
-    val today = LocalDate.now()
     val filter = settings.lists.firstOrNull { it.id == filterId }
     val visible = tasks.filter { filter == null || it.listId == filter.id }
 
@@ -158,6 +187,7 @@ fun TagwerkApp() {
     }
 
     fun toggle(occurrence: Occurrence) {
+        refreshToday()
         val before = occurrence.task
         val updated = store.toggle(occurrence) ?: return
         val advanced = occurrence.kind == Occurrence.Kind.OPEN && before.isRepeating && updated.date != before.date
@@ -178,6 +208,7 @@ fun TagwerkApp() {
     }
 
     fun open(task: Task?) {
+        refreshToday()
         editing = task
         editorOpen = true
     }
@@ -190,15 +221,20 @@ fun TagwerkApp() {
 
     fun deleteList(list: TaskList) {
         val target = settings.lists.firstOrNull { it.id != list.id } ?: return
+        val hadTasks = tasks.any { settings.list(it.listId).id == list.id }
         if (settingsStore.deleteList(list.id)) {
             if (filterId == list.id) filterId = null
-            toast("„${list.name}“ gelöscht – Aufgaben sind jetzt in „${target.name}“")
+            toast(
+                if (hadTasks) "„${list.name}“ gelöscht – Aufgaben sind jetzt in „${target.name}“"
+                else "„${list.name}“ gelöscht",
+            )
         }
     }
 
     val showFab = tab != AppTab.SETTINGS
     // Jeder Bereich behält beim Wechseln seine Ansicht und Scrollposition.
     val tabStates = rememberSaveableStateHolder()
+    val tickScope = rememberCoroutineScope()
 
     Scaffold(
         containerColor = p.background,
@@ -209,69 +245,77 @@ fun TagwerkApp() {
                     shape = RoundedCornerShape(18.dp),
                     containerColor = p.ink,
                     contentColor = p.background,
-                    actionColor = p.accent,
+                    // „Rückgängig“ muss bei jeder Themenfarbe lesbar bleiben
+                    actionColor = if (contrast(p.accent, p.ink) >= 3f) p.accent else p.background,
                 )
             }
         },
         floatingActionButton = { if (showFab) AddButton(onClick = { open(null) }) },
-        bottomBar = { BottomTabs(tab = tab, onSelect = { tab = it }) },
+        bottomBar = {
+            BottomTabs(tab = tab, onSelect = {
+                refreshToday()
+                tab = it
+            })
+        },
     ) { padding ->
         val contentPadding = PaddingValues(
             top = padding.calculateTopPadding(),
             bottom = padding.calculateBottomPadding() + if (showFab) 96.dp else 16.dp,
         )
-        tabStates.SaveableStateProvider(tab.name) {
-            when (tab) {
-                AppTab.TASKS -> TasksTab(
-                    tasks = tasks,
-                    visible = visible,
-                    today = today,
-                    mode = mode,
-                    onMode = { mode = it },
-                    selectedDay = selectedDay,
-                    onSelectDay = { selectedDay = it },
-                    filter = filter,
-                    onFilter = { filterId = it?.id },
-                    onEditLists = { tab = AppTab.SETTINGS },
-                    doneExpanded = doneExpanded,
-                    onDoneExpanded = { doneExpanded = it },
-                    onToggle = ::toggle,
-                    onOpen = { open(it) },
-                    onDelete = ::delete,
-                    onClearCompleted = { store.clearCompleted() },
-                    contentPadding = contentPadding,
-                )
+        CompositionLocalProvider(LocalTickScope provides tickScope) {
+            tabStates.SaveableStateProvider(tab.name) {
+                when (tab) {
+                    AppTab.TASKS -> TasksTab(
+                        tasks = tasks,
+                        visible = visible,
+                        today = today,
+                        mode = mode,
+                        onMode = { mode = it },
+                        selectedDay = selectedDay,
+                        onSelectDay = { selectedPick = pick(it) },
+                        filter = filter,
+                        onFilter = { filterId = it?.id },
+                        onEditLists = { tab = AppTab.SETTINGS },
+                        doneExpanded = doneExpanded,
+                        onDoneExpanded = { doneExpanded = it },
+                        onToggle = ::toggle,
+                        onOpen = { open(it) },
+                        onDelete = ::delete,
+                        onClearCompleted = { store.clearCompleted() },
+                        contentPadding = contentPadding,
+                    )
 
-                AppTab.CALENDAR -> CalendarScreen(
-                    tasks = tasks,
-                    today = today,
-                    selected = calendarDay,
-                    onSelect = { calendarDay = it },
-                    onToggle = ::toggle,
-                    onOpen = { open(it) },
-                    contentPadding = contentPadding,
-                )
+                    AppTab.CALENDAR -> CalendarScreen(
+                        tasks = tasks,
+                        today = today,
+                        selected = calendarDay,
+                        onSelect = { calendarPick = pick(it) },
+                        onToggle = ::toggle,
+                        onOpen = { open(it) },
+                        contentPadding = contentPadding,
+                    )
 
-                AppTab.CHECKLIST -> ChecklistScreen(
-                    tasks = tasks,
-                    today = today,
-                    day = checklistDay,
-                    onDayChange = { checklistDay = it },
-                    onToggle = ::toggle,
-                    onOpen = { open(it) },
-                    contentPadding = contentPadding,
-                )
+                    AppTab.CHECKLIST -> ChecklistScreen(
+                        tasks = tasks,
+                        today = today,
+                        day = checklistDay,
+                        onDayChange = { checklistPick = pick(it) },
+                        onToggle = ::toggle,
+                        onOpen = { open(it) },
+                        contentPadding = contentPadding,
+                    )
 
-                AppTab.SETTINGS -> SettingsScreen(
-                    settings = settings,
-                    tasks = tasks,
-                    onNameChange = settingsStore::setName,
-                    onAccentChange = settingsStore::setAccent,
-                    onSaveList = settingsStore::saveList,
-                    onDeleteList = ::deleteList,
-                    newListId = settingsStore::newListId,
-                    contentPadding = contentPadding,
-                )
+                    AppTab.SETTINGS -> SettingsScreen(
+                        settings = settings,
+                        tasks = tasks,
+                        onNameChange = settingsStore::setName,
+                        onAccentChange = settingsStore::setAccent,
+                        onSaveList = settingsStore::saveList,
+                        onDeleteList = ::deleteList,
+                        newListId = settingsStore::newListId,
+                        contentPadding = contentPadding,
+                    )
+                }
             }
         }
     }
@@ -286,16 +330,17 @@ fun TagwerkApp() {
         TaskEditorSheet(
             initial = editing,
             defaultDate = defaultDate,
-            defaultListId = filter?.id,
+            // Den Listenfilter gibt es nur im Bereich Aufgaben
+            defaultListId = if (tab == AppTab.TASKS) filter?.id else null,
             onDismiss = { editorOpen = false },
             onSave = {
                 store.save(it)
                 editorOpen = false
                 if (editing == null && it.date != null && it.date != defaultDate) {
                     when (tab) {
-                        AppTab.TASKS -> if (mode == ViewMode.DAY) selectedDay = it.date
-                        AppTab.CALENDAR -> calendarDay = it.date
-                        AppTab.CHECKLIST -> checklistDay = it.date
+                        AppTab.TASKS -> if (mode == ViewMode.DAY) selectedPick = pick(it.date)
+                        AppTab.CALENDAR -> calendarPick = pick(it.date)
+                        AppTab.CHECKLIST -> checklistPick = pick(it.date)
                         AppTab.SETTINGS -> Unit
                     }
                 }
@@ -694,6 +739,13 @@ private fun ListFilter(selected: TaskList?, onSelect: (TaskList?) -> Unit, onEdi
             Pill("Listen bearbeiten", selected = false, icon = Icons.Rounded.Edit, onClick = onEdit)
         }
     }
+}
+
+/** Kontrastverhältnis zweier Farben (WCAG). */
+private fun contrast(a: Color, b: Color): Float {
+    val la = a.luminance()
+    val lb = b.luminance()
+    return (maxOf(la, lb) + 0.05f) / (minOf(la, lb) + 0.05f)
 }
 
 @Composable

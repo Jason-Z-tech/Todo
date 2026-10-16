@@ -89,14 +89,17 @@ class TaskStore private constructor(context: Context) {
         }
     }
 
-    /** Hakt den aktuellen Termin ab – gezählt für den Tag [on] – und springt zum nächsten offenen. */
+    /**
+     * Hakt den aktuellen (ggf. überfälligen) Termin ab und springt zum nächsten offenen
+     * Termin ab [on]. Wird Verpasstes erst heute abgehakt, bleibt der heutige Termin
+     * samt Erinnerung also offen.
+     */
     private fun completeRepeating(task: Task, on: LocalDate): Task {
         val date = task.date ?: return task
-        val day = maxOf(date, on)
-        val doneDates = task.doneDates + day
+        val doneDates = task.doneDates + date
         var next = task.nextAfter(date)
         var steps = 0
-        while ((!next.isAfter(day) || next in doneDates) && steps < 5000) {
+        while ((next.isBefore(on) || next in doneDates) && steps < 5000) {
             next = task.nextAfter(next)
             steps++
         }

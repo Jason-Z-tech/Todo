@@ -39,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,9 +58,22 @@ import app.tagwerk.ui.theme.Tagwerk
 import app.tagwerk.ui.theme.list
 import app.tagwerk.ui.theme.soft
 import app.tagwerk.ui.theme.strong
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+
+/**
+ * Scope für das verzögerte Speichern nach dem Abhaken. Die App stellt einen Scope bereit,
+ * der Tab-Wechsel überlebt – sonst ginge ein Haken verloren, wenn man direkt danach wechselt.
+ */
+val LocalTickScope = staticCompositionLocalOf<CoroutineScope?> { null }
+
+@Composable
+fun rememberTickScope(): CoroutineScope {
+    val local = rememberCoroutineScope()
+    return LocalTickScope.current ?: local
+}
 
 @Composable
 fun SwipeableTaskCard(
@@ -136,7 +150,7 @@ fun TaskCard(
     val p = Tagwerk.palette
     val list = task.list()
     val haptics = LocalHapticFeedback.current
-    val scope = rememberCoroutineScope()
+    val scope = rememberTickScope()
     // Lokaler Zustand, damit die Abhak-Animation sichtbar ist,
     // bevor die Aufgabe in den Bereich „Erledigt“ wandert.
     var shownChecked by remember(task.id, checked, date) { mutableStateOf(checked) }
