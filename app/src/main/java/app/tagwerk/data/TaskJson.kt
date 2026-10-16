@@ -2,6 +2,7 @@ package app.tagwerk.data
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 
@@ -10,7 +11,7 @@ internal object TaskJson {
     fun encode(tasks: List<Task>): String {
         val array = JSONArray()
         tasks.forEach { array.put(encode(it)) }
-        return JSONObject().put("version", 1).put("tasks", array).toString()
+        return JSONObject().put("version", 2).put("tasks", array).toString()
     }
 
     fun decode(text: String): List<Task> {
@@ -28,7 +29,12 @@ internal object TaskJson {
         t.time?.let { put("time", it.toString()) }
         put("reminder", t.reminder.name)
         put("repeat", t.repeat.name)
-        put("category", t.category.name)
+        if (t.repeatDays.isNotEmpty()) {
+            put("repeatDays", JSONArray().apply { t.repeatDays.sorted().forEach { put(it.value) } })
+        }
+        // Schlüssel „category“ beibehalten: ältere Versionen speicherten hier die feste Kategorie,
+        // deren Name jetzt die ID der Liste ist.
+        put("category", t.listId)
         put("important", t.important)
         put("done", t.done)
         t.completedAt?.let { put("completedAt", it) }
@@ -38,10 +44,15 @@ internal object TaskJson {
                 put(JSONObject().put("id", s.id).put("text", s.text).put("done", s.done))
             }
         })
+        if (t.doneDates.isNotEmpty()) {
+            put("doneDates", JSONArray().apply { t.doneDates.sorted().forEach { put(it.toString()) } })
+        }
     }
 
     private fun decode(o: JSONObject): Task {
         val subs = o.optJSONArray("subtasks")
+        val days = o.optJSONArray("repeatDays")
+        val doneDates = o.optJSONArray("doneDates")
         return Task(
             id = o.getLong("id"),
             title = o.getString("title"),
@@ -50,7 +61,10 @@ internal object TaskJson {
             time = o.optString("time").takeIf { it.isNotEmpty() }?.let(LocalTime::parse),
             reminder = enumOr(o.optString("reminder"), Reminder.NONE),
             repeat = enumOr(o.optString("repeat"), Repeat.NONE),
-            category = enumOr(o.optString("category"), Category.PERSONAL),
+            repeatDays = if (days == null) emptySet() else (0 until days.length())
+                .mapNotNull { i -> days.optInt(i, 0).takeIf { it in 1..7 }?.let(DayOfWeek::of) }
+                .toSet(),
+            listId = o.optString("category").ifEmpty { DefaultLists.PERSONAL },
             important = o.optBoolean("important", false),
             done = o.optBoolean("done", false),
             completedAt = if (o.has("completedAt")) o.getLong("completedAt") else null,
@@ -59,6 +73,9 @@ internal object TaskJson {
                 val s = subs.getJSONObject(i)
                 Subtask(s.getLong("id"), s.getString("text"), s.optBoolean("done", false))
             },
+            doneDates = if (doneDates == null) emptySet() else (0 until doneDates.length())
+                .mapNotNull { i -> runCatching { LocalDate.parse(doneDates.getString(i)) }.getOrNull() }
+                .toSet(),
         )
     }
 

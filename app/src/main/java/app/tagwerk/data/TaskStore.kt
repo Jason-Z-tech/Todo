@@ -43,21 +43,72 @@ class TaskStore private constructor(context: Context) {
 
     /**
      * Hakt eine Aufgabe ab (oder wieder auf). Wiederkehrende Aufgaben
-     * springen dabei auf ihren nächsten Termin, statt erledigt zu bleiben.
+     * springen dabei auf ihren nächsten Termin, statt erledigt zu bleiben;
+     * der abgehakte Tag wird gemerkt.
      */
     fun setDone(id: Long, done: Boolean): Task? {
         val task = find(id) ?: return null
-        val updated = if (done && task.repeat != Repeat.NONE && task.date != null) {
-            val today = LocalDate.now()
-            var next = task.repeat.next(task.date)
-            while (next.isBefore(today)) next = task.repeat.next(next)
-            task.copy(date = next, subtasks = task.subtasks.map { it.copy(done = false) })
+        val updated = if (done && task.isRepeating) {
+            completeRepeating(task)
         } else {
             task.copy(done = done, completedAt = if (done) System.currentTimeMillis() else null)
         }
         save(updated)
         if (done) Notifications.dismiss(appContext, id)
         return updated
+    }
+
+    /**
+     * Hakt einen Eintrag aus Kalender, Tagesansicht oder Checkliste ab – oder wieder auf.
+     * Bei wiederkehrenden Aufgaben wirkt das nur auf genau diesen Tag.
+     */
+    fun toggle(occurrence: Occurrence): Task? {
+        val task = find(occurrence.task.id) ?: return null
+        val day = occurrence.date
+        return when (occurrence.kind) {
+            Occurrence.Kind.OPEN -> setDone(task.id, true)
+            Occurrence.Kind.UPCOMING -> {
+                if (!task.isRepeating) return setDone(task.id, true)
+                task.copy(doneDates = trimmed(task.doneDates + day)).also { save(it) }
+            }
+            Occurrence.Kind.DONE -> {
+                if (!task.isRepeating) return setDone(task.id, false)
+                val date = task.date
+                task.copy(
+                    doneDates = task.doneDates - day,
+                    // Der Tag ist wieder offen – liegt er vor dem nächsten Termin, geht es dort weiter.
+                    date = if (date == null || day.isBefore(date)) day else date,
+                ).also { save(it) }
+            }
+        }
+    }
+
+    private fun completeRepeating(task: Task): Task {
+        val date = task.date ?: return task
+        val today = LocalDate.now()
+        // Überfälliges zählt als heute erledigt.
+        val day = maxOf(date, today)
+        val doneDates = task.doneDates + day
+        var next = task.nextAfter(date)
+        var steps = 0
+        while ((!next.isAfter(day) || next in doneDates) && steps < 5000) {
+            next = task.nextAfter(next)
+            steps++
+        }
+        return task.copy(
+            date = next,
+            doneDates = trimmed(doneDates),
+            subtasks = task.subtasks.map { it.copy(done = false) },
+        )
+    }
+
+    /** Nur die letzten Tage behalten, damit die Datei nicht endlos wächst. */
+    private fun trimmed(dates: Set<LocalDate>): Set<LocalDate> =
+        if (dates.size <= MAX_DONE_DATES) dates else dates.sortedDescending().take(MAX_DONE_DATES).toSet()
+
+    /** Verschiebt alle Aufgaben einer Liste in eine andere (z. B. beim Löschen der Liste). */
+    fun moveToList(fromId: String, toId: String) {
+        mutate { list -> list.map { if (it.listId == fromId) it.copy(listId = toId) else it } }
     }
 
     fun toggleSubtask(taskId: Long, subtaskId: Long) {
@@ -118,14 +169,14 @@ class TaskStore private constructor(context: Context) {
                 id = now,
                 title = "Tippe auf den Kreis, um abzuhaken",
                 date = today,
-                category = Category.PERSONAL,
+                listId = DefaultLists.PERSONAL,
                 createdAt = now,
             ),
             Task(
                 id = now + 1,
                 title = "Nach links wischen zum Löschen",
                 date = today,
-                category = Category.IDEAS,
+                listId = DefaultLists.IDEAS,
                 createdAt = now + 1,
             ),
             Task(
@@ -135,7 +186,7 @@ class TaskStore private constructor(context: Context) {
                 date = today.plusDays(1),
                 time = LocalTime.of(17, 30),
                 reminder = Reminder.MIN_15,
-                category = Category.SHOPPING,
+                listId = DefaultLists.SHOPPING,
                 createdAt = now + 2,
                 subtasks = listOf(
                     Subtask(now + 10, "Hafermilch"),
@@ -148,6 +199,7 @@ class TaskStore private constructor(context: Context) {
 
     companion object {
         private const val TAG = "TaskStore"
+        private const val MAX_DONE_DATES = 400
 
         @Volatile
         private var instance: TaskStore? = null

@@ -52,7 +52,9 @@ import androidx.compose.ui.unit.dp
 import app.tagwerk.data.Repeat
 import app.tagwerk.data.Reminder
 import app.tagwerk.data.Task
+import app.tagwerk.data.TaskList
 import app.tagwerk.ui.theme.Tagwerk
+import app.tagwerk.ui.theme.list
 import app.tagwerk.ui.theme.soft
 import app.tagwerk.ui.theme.strong
 import kotlinx.coroutines.delay
@@ -67,7 +69,22 @@ fun SwipeableTaskCard(
     onOpen: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    checked: Boolean = task.done,
+    date: LocalDate? = task.date,
+    swipeEnabled: Boolean = true,
 ) {
+    if (!swipeEnabled) {
+        TaskCard(
+            task = task,
+            showDate = showDate,
+            onToggle = onToggle,
+            onOpen = onOpen,
+            checked = checked,
+            date = date,
+            modifier = modifier.padding(horizontal = 16.dp, vertical = 5.dp),
+        )
+        return
+    }
     val currentOnDelete by rememberUpdatedState(onDelete)
     val state = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
@@ -97,10 +114,14 @@ fun SwipeableTaskCard(
             }
         },
     ) {
-        TaskCard(task = task, showDate = showDate, onToggle = onToggle, onOpen = onOpen)
+        TaskCard(task = task, showDate = showDate, onToggle = onToggle, onOpen = onOpen, checked = checked, date = date)
     }
 }
 
+/**
+ * Karte einer Aufgabe. [checked] und [date] beschreiben den gezeigten Termin –
+ * bei wiederkehrenden Aufgaben kann das ein späterer oder schon abgehakter Tag sein.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TaskCard(
@@ -109,16 +130,19 @@ fun TaskCard(
     onToggle: () -> Unit,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
+    checked: Boolean = task.done,
+    date: LocalDate? = task.date,
 ) {
     val p = Tagwerk.palette
+    val list = task.list()
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     // Lokaler Zustand, damit die Abhak-Animation sichtbar ist,
     // bevor die Aufgabe in den Bereich „Erledigt“ wandert.
-    var checked by remember(task.id, task.done, task.date) { mutableStateOf(task.done) }
-    var busy by remember(task.id, task.done, task.date) { mutableStateOf(false) }
+    var shownChecked by remember(task.id, checked, date) { mutableStateOf(checked) }
+    var busy by remember(task.id, checked, date) { mutableStateOf(false) }
     val today = LocalDate.now()
-    val overdue = task.isOverdue(today)
+    val overdue = !checked && date != null && date.isBefore(today)
 
     Row(
         modifier = modifier
@@ -130,13 +154,13 @@ fun TaskCard(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         CheckCircle(
-            checked = checked,
-            fill = task.category.soft(),
-            stroke = task.category.strong(),
+            checked = shownChecked,
+            fill = list.soft(),
+            stroke = list.strong(),
             onClick = {
                 if (busy) return@CheckCircle
                 busy = true
-                checked = !checked
+                shownChecked = !shownChecked
                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 scope.launch {
                     delay(420)
@@ -149,8 +173,8 @@ fun TaskCard(
             Text(
                 task.title,
                 style = MaterialTheme.typography.bodyLarge,
-                color = if (checked) p.muted else p.ink,
-                textDecoration = if (checked) TextDecoration.LineThrough else null,
+                color = if (shownChecked) p.muted else p.ink,
+                textDecoration = if (shownChecked) TextDecoration.LineThrough else null,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -168,19 +192,19 @@ fun TaskCard(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                CategoryTag(task)
+                ListTag(list)
                 val metaColor = if (overdue) p.danger else p.muted
-                if (showDate && task.date != null) {
-                    Meta(Icons.Rounded.Event, formatDay(task.date, today), metaColor)
+                if (showDate && date != null) {
+                    Meta(Icons.Rounded.Event, formatDay(date, today), metaColor)
                 }
                 if (task.time != null) {
                     Meta(Icons.Rounded.Schedule, formatTime(task.time), metaColor)
                 }
-                if (task.reminder != Reminder.NONE && task.time != null && !task.done) {
+                if (task.reminder != Reminder.NONE && task.time != null && !checked) {
                     Meta(Icons.Rounded.NotificationsNone, null, p.muted)
                 }
                 if (task.repeat != Repeat.NONE) {
-                    Meta(Icons.Rounded.Repeat, task.repeat.label, p.muted)
+                    Meta(Icons.Rounded.Repeat, repeatLabel(task.repeat, task.repeatDays), p.muted)
                 }
                 if (task.subtasks.isNotEmpty()) {
                     val done = task.subtasks.count { it.done }
@@ -196,16 +220,22 @@ fun TaskCard(
 }
 
 @Composable
-private fun CategoryTag(task: Task) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+fun ListTag(list: TaskList, modifier: Modifier = Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Box(
             Modifier
                 .size(8.dp)
                 .clip(CircleShape)
-                .background(task.category.strong().copy(alpha = 0.7f)),
+                .background(list.strong().copy(alpha = 0.7f)),
         )
         Spacer(Modifier.width(5.dp))
-        Text(task.category.label, style = MaterialTheme.typography.labelMedium, color = task.category.strong())
+        Text(
+            list.name,
+            style = MaterialTheme.typography.labelMedium,
+            color = list.strong(),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

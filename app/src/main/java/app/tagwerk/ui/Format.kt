@@ -1,5 +1,7 @@
 package app.tagwerk.ui
 
+import app.tagwerk.data.Repeat
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -11,6 +13,7 @@ private val shortDate = DateTimeFormatter.ofPattern("d. MMM", german)
 private val timeFormat = DateTimeFormatter.ofPattern("HH:mm", german)
 
 val weekdayShort = listOf("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+val weekdayLong = listOf("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
 
 fun formatLongDate(date: LocalDate): String = longDate.format(date)
 
@@ -24,9 +27,13 @@ fun formatDay(date: LocalDate, today: LocalDate = LocalDate.now()): String = whe
     else -> "${weekdayShort[date.dayOfWeek.value - 1]}, ${shortDate.format(date)}"
 }
 
-fun greeting(time: LocalTime = LocalTime.now()): String = when (time.hour) {
-    in 5..10 -> "Guten Morgen"
-    in 11..17 -> "Hallo du"
-    in 18..22 -> "Guten Abend"
-    else -> "Gute Nacht"
+/** Begrüßung oben in der App, z. B. „Hallo Queen“. */
+fun greeting(name: String): String = name.trim().let { if (it.isEmpty()) "Hallo" else "Hallo $it" }
+
+/** „Täglich“, „Werktags“ … – bei bestimmten Tagen z. B. „Mo, Do“. */
+fun repeatLabel(repeat: Repeat, days: Set<DayOfWeek>): String = when {
+    repeat != Repeat.DAYS -> repeat.label
+    days.isEmpty() -> Repeat.WEEKLY.label
+    days.size == 7 -> Repeat.DAILY.label
+    else -> days.sorted().joinToString(", ") { weekdayShort[it.value - 1] }
 }

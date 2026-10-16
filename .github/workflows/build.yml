@@ -20,10 +20,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Debug- und Release-APK bauen
+      - name: Debug- und Release-APK bauen, Unit-Tests
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug assembleRelease --stacktrace
+          ./gradlew assembleDebug assembleRelease testDebugUnitTest --stacktrace
           cp app/build/outputs/apk/release/app-release.apk Tagwerk.apk
 
       - name: Signatur und Version prüfen

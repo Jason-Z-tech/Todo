@@ -1,5 +1,6 @@
 package app.tagwerk.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -56,16 +59,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
-import app.tagwerk.data.Category
 import app.tagwerk.data.Reminder
 import app.tagwerk.data.Repeat
 import app.tagwerk.data.Subtask
 import app.tagwerk.data.Task
+import app.tagwerk.data.TaskList
 import app.tagwerk.ui.theme.Tagwerk
 import app.tagwerk.ui.theme.soft
 import app.tagwerk.ui.theme.strong
@@ -81,11 +86,14 @@ import java.time.temporal.TemporalAdjusters
 fun TaskEditorSheet(
     initial: Task?,
     defaultDate: LocalDate?,
+    defaultListId: String?,
     onDismiss: () -> Unit,
     onSave: (Task) -> Unit,
     onDelete: (Task) -> Unit,
+    onCreateList: (name: String, color: Int) -> TaskList,
 ) {
     val p = Tagwerk.palette
+    val lists = Tagwerk.settings.lists
     val today = LocalDate.now()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -95,13 +103,17 @@ fun TaskEditorSheet(
     var time by remember { mutableStateOf(initial?.time) }
     var reminder by remember { mutableStateOf(initial?.reminder ?: Reminder.NONE) }
     var repeat by remember { mutableStateOf(initial?.repeat ?: Repeat.NONE) }
-    var category by remember { mutableStateOf(initial?.category ?: Category.PERSONAL) }
+    var repeatDays by remember { mutableStateOf(initial?.repeatDays.orEmpty()) }
+    var listId by remember {
+        mutableStateOf(initial?.listId ?: defaultListId?.takeIf { id -> lists.any { it.id == id } } ?: lists.first().id)
+    }
     var important by remember { mutableStateOf(initial?.important ?: false) }
     val subtasks = remember { mutableStateListOf<Subtask>().apply { addAll(initial?.subtasks.orEmpty()) } }
     var newSubtask by remember { mutableStateOf("") }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    var showNewList by remember { mutableStateOf(false) }
 
     val titleFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -118,12 +130,22 @@ fun TaskEditorSheet(
         }
     }
 
+    /** Bei „Bestimmte Tage“ fällt der erste Termin auf den nächsten gewählten Wochentag ab dem Datum. */
+    fun firstDate(): LocalDate? {
+        val d0 = date ?: return null
+        if (repeat != Repeat.DAYS || repeatDays.isEmpty()) return d0
+        var d = d0
+        while (d.dayOfWeek !in repeatDays) d = d.plusDays(1)
+        return d
+    }
+
     fun buildTask(): Task {
         val base = initial ?: Task(id = System.currentTimeMillis(), title = "")
         val pending = newSubtask.trim()
         val allSubtasks = if (pending.isNotEmpty()) {
             subtasks.toList() + Subtask(System.nanoTime(), pending)
         } else subtasks.toList()
+        val date = firstDate()
         return base.copy(
             title = title.trim(),
             note = note.trim(),
@@ -131,7 +153,8 @@ fun TaskEditorSheet(
             time = if (date == null) null else time,
             reminder = if (date == null || time == null) Reminder.NONE else reminder,
             repeat = if (date == null) Repeat.NONE else repeat,
-            category = category,
+            repeatDays = if (date != null && repeat == Repeat.DAYS) repeatDays else emptySet(),
+            listId = listId,
             important = important,
             subtasks = allSubtasks,
         )
@@ -242,23 +265,38 @@ fun TaskEditorSheet(
                     Pill(r.label, selected = repeat == r, onClick = {
                         repeat = r
                         if (r != Repeat.NONE && date == null) date = today
+                        if (r == Repeat.DAYS && repeatDays.isEmpty()) repeatDays = setOf((date ?: today).dayOfWeek)
                     })
+                }
+            }
+            if (repeat == Repeat.DAYS) {
+                Spacer(Modifier.height(12.dp))
+                WeekdayPicker(selected = repeatDays, onChange = { repeatDays = it })
+                firstDate()?.let { first ->
+                    Text(
+                        "Erster Termin: ${formatDay(first, today)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = p.muted,
+                        modifier = Modifier.padding(start = 4.dp, top = 10.dp),
+                    )
                 }
             }
 
             Label("Liste")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Category.entries.forEach { c ->
+                lists.forEach { l ->
                     Pill(
-                        c.label,
-                        selected = category == c,
-                        onClick = { category = c },
-                        selectedColor = c.soft(),
-                        selectedContent = c.strong(),
+                        l.name,
+                        selected = listId == l.id,
+                        onClick = { listId = l.id },
+                        selectedColor = l.soft(),
+                        selectedContent = l.strong(),
                     )
                 }
+                Pill("Neue Liste", selected = false, icon = Icons.Rounded.Add, onClick = { showNewList = true })
             }
 
+            val selectedList = lists.firstOrNull { it.id == listId } ?: lists.first()
             Label("Teilschritte")
             Surface(shape = RoundedCornerShape(22.dp), color = p.card) {
                 Column(Modifier.padding(horizontal = 6.dp, vertical = 6.dp)) {
@@ -266,8 +304,8 @@ fun TaskEditorSheet(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CheckCircle(
                                 checked = sub.done,
-                                fill = category.soft(),
-                                stroke = category.strong(),
+                                fill = selectedList.soft(),
+                                stroke = selectedList.strong(),
                                 onClick = { subtasks[index] = sub.copy(done = !sub.done) },
                                 size = 20.dp,
                             )
@@ -347,6 +385,19 @@ fun TaskEditorSheet(
         }
     }
 
+    if (showNewList) {
+        ListEditDialog(
+            initial = null,
+            canDelete = false,
+            onDismiss = { showNewList = false },
+            onSave = { name, color ->
+                listId = onCreateList(name, color).id
+                showNewList = false
+            },
+            onDelete = {},
+        )
+    }
+
     if (showTimePicker) {
         val initialTime = time ?: LocalTime.now().plusHours(1).withMinute(0)
         val state = rememberTimePickerState(
@@ -373,6 +424,35 @@ fun TaskEditorSheet(
                 TextButton(onClick = { showTimePicker = false }) { Text("Abbrechen") }
             },
         )
+    }
+}
+
+/** Sieben runde Knöpfe Mo–So; mindestens ein Tag bleibt immer gewählt. */
+@Composable
+private fun WeekdayPicker(selected: Set<DayOfWeek>, onChange: (Set<DayOfWeek>) -> Unit) {
+    val p = Tagwerk.palette
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+        DayOfWeek.entries.forEach { day ->
+            val on = day in selected
+            Surface(
+                onClick = {
+                    val next = if (on) selected - day else selected + day
+                    if (next.isNotEmpty()) onChange(next)
+                },
+                shape = CircleShape,
+                color = if (on) p.accent else p.chip,
+                contentColor = if (on) p.onAccent else p.ink,
+                border = if (on) null else BorderStroke(1.dp, p.line),
+                modifier = Modifier
+                    .weight(1f)
+                    .aspectRatio(1f)
+                    .semantics { contentDescription = weekdayLong[day.value - 1] },
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(weekdayShort[day.value - 1], style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
     }
 }
 

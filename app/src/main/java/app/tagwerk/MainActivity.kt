@@ -6,8 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import app.tagwerk.data.TaskStore
 import app.tagwerk.reminders.Notifications
-import app.tagwerk.ui.TagwerkApp
-import app.tagwerk.ui.theme.TagwerkTheme
+import app.tagwerk.ui.TagwerkRoot
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -16,9 +15,7 @@ class MainActivity : ComponentActivity() {
         Notifications.createChannel(this)
         TaskStore.get(this).rescheduleAll()
         setContent {
-            TagwerkTheme {
-                TagwerkApp()
-            }
+            TagwerkRoot()
         }
     }
 }

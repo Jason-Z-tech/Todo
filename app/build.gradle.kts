@@ -73,4 +73,8 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    testImplementation("junit:junit:4.13.2")
+    // echte org.json-Umsetzung für Unit-Tests (die aus android.jar ist nur ein Stub)
+    testImplementation("org.json:json:20240303")
 }

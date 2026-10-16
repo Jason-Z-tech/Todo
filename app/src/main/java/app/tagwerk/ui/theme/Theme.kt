@@ -8,9 +8,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import app.tagwerk.data.Category
+import app.tagwerk.data.Settings
+import app.tagwerk.data.Task
+import app.tagwerk.data.TaskList
 
 @Immutable
 data class Palette(
@@ -67,43 +70,95 @@ val DarkPalette = Palette(
 
 val LocalPalette = staticCompositionLocalOf { LightPalette }
 
+/** Einstellungen (Listen, Name, Farbe) für alle Bildschirme. */
+val LocalSettings = staticCompositionLocalOf { Settings() }
+
 object Tagwerk {
     val palette: Palette
         @Composable @ReadOnlyComposable get() = LocalPalette.current
+
+    val settings: Settings
+        @Composable @ReadOnlyComposable get() = LocalSettings.current
 }
 
-private data class CategoryTone(val pastel: Color, val deep: Color)
-
-private fun Category.tone(): CategoryTone = when (this) {
-    Category.PERSONAL -> CategoryTone(Color(0xFFFBD3C2), Color(0xFF9A5540))
-    Category.WORK -> CategoryTone(Color(0xFFCFE0F0), Color(0xFF3F5D7C))
-    Category.SHOPPING -> CategoryTone(Color(0xFFD4E6CC), Color(0xFF4A6840))
-    Category.HEALTH -> CategoryTone(Color(0xFFF6D0D8), Color(0xFF8F4257))
-    Category.HOME -> CategoryTone(Color(0xFFE0D6F0), Color(0xFF5C4C7E))
-    Category.IDEAS -> CategoryTone(Color(0xFFF8E8B0), Color(0xFF7A6322))
+/**
+ * Baut die Farbpalette rund um eine Hauptfarbe. Pfirsich behält die
+ * handverlesenen Originaltöne; jede andere Farbe färbt Hintergrund,
+ * Karten und Linien ganz leicht mit ein.
+ */
+fun paletteFor(accent: Color, dark: Boolean): Palette {
+    if (accent == Color(Settings.DEFAULT_ACCENT)) return if (dark) DarkPalette else LightPalette
+    val hsl = accent.toHsl()
+    return if (!dark) {
+        val base = LightPalette
+        val strong = Hsl(hsl.hue, minOf(hsl.saturation, 0.55f), minOf(hsl.lightness, 0.46f)).toColor()
+        base.copy(
+            background = Color(0xFFFCFAF7).mix(accent, 0.07f),
+            card = Color(0xFFFFFEFC).mix(accent, 0.025f),
+            line = Color(0xFFEDE7E1).mix(accent, 0.14f),
+            chip = Color(0xFFF6F2EE).mix(accent, 0.11f),
+            accent = accent,
+            accentSoft = accent.mix(Color.White, 0.55f),
+            accentStrong = strong,
+            onAccent = accent.readableInk(base.ink),
+        )
+    } else {
+        val base = DarkPalette
+        val strong = Hsl(hsl.hue, minOf(hsl.saturation, 0.8f), maxOf(hsl.lightness, 0.74f)).toColor()
+        val background = Color(0xFF1E1B1D).mix(accent, 0.04f)
+        base.copy(
+            background = background,
+            card = Color(0xFF292527).mix(accent, 0.05f),
+            line = Color(0xFF3A3437).mix(accent, 0.08f),
+            chip = Color(0xFF322D30).mix(accent, 0.07f),
+            accent = accent,
+            accentSoft = background.mix(accent, 0.3f),
+            accentStrong = strong,
+            onAccent = accent.readableInk(Color(0xFF2B2124)),
+        )
+    }
 }
+
+/** Handverlesene Schrifttöne der ursprünglichen Listen. */
+private val presetDeep = mapOf(
+    0xFFFBD3C2.toInt() to Color(0xFF9A5540),
+    0xFFCFE0F0.toInt() to Color(0xFF3F5D7C),
+    0xFFD4E6CC.toInt() to Color(0xFF4A6840),
+    0xFFF6D0D8.toInt() to Color(0xFF8F4257),
+    0xFFE0D6F0.toInt() to Color(0xFF5C4C7E),
+    0xFFF8E8B0.toInt() to Color(0xFF7A6322),
+)
+
+/** Reiner Pastellton einer Liste, unabhängig vom Modus. */
+fun TaskList.pastel(): Color = Color(color).asPastel()
+
+private fun TaskList.deep(): Color = presetDeep[color] ?: pastel().deepTone()
 
 /** Hintergrundfarbe einer Liste (zarter Pastellton). */
 @Composable
 @ReadOnlyComposable
-fun Category.soft(): Color =
-    if (Tagwerk.palette.isDark) tone().pastel.copy(alpha = 0.22f) else tone().pastel
+fun TaskList.soft(): Color =
+    if (Tagwerk.palette.isDark) pastel().copy(alpha = 0.22f) else pastel()
 
 /** Schrift-/Symbolfarbe einer Liste (kräftiger Ton desselben Pastells). */
 @Composable
 @ReadOnlyComposable
-fun Category.strong(): Color =
-    if (Tagwerk.palette.isDark) tone().pastel else tone().deep
+fun TaskList.strong(): Color =
+    if (Tagwerk.palette.isDark) pastel() else deep()
 
-/** Reiner Pastellton, unabhängig vom Modus. */
-fun Category.pastel(): Color = tone().pastel
+/** Die Liste, in der diese Aufgabe steht. */
+@Composable
+@ReadOnlyComposable
+fun Task.list(): TaskList = Tagwerk.settings.list(listId)
 
 @Composable
 fun TagwerkTheme(
     dark: Boolean = isSystemInDarkTheme(),
+    settings: Settings = Settings(),
     content: @Composable () -> Unit,
 ) {
-    val p = if (dark) DarkPalette else LightPalette
+    val accent = Color(settings.accent)
+    val p = remember(accent, dark) { paletteFor(accent, dark) }
     val scheme = if (dark) {
         darkColorScheme(
             primary = p.accent,
@@ -149,7 +204,7 @@ fun TagwerkTheme(
             error = p.danger,
         )
     }
-    CompositionLocalProvider(LocalPalette provides p) {
+    CompositionLocalProvider(LocalPalette provides p, LocalSettings provides settings) {
         MaterialTheme(colorScheme = scheme, typography = TagwerkTypography, content = content)
     }
 }
