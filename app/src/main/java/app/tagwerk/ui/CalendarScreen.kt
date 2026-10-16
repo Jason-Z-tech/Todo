@@ -46,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -54,6 +55,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.tagwerk.data.Occurrence
 import app.tagwerk.data.Task
 import app.tagwerk.data.occurrenceOrder
@@ -235,7 +237,9 @@ private fun periodTitle(mode: CalendarMode, selected: LocalDate, today: LocalDat
         } else {
             "${monday.dayOfMonth}. ${monthShort.format(monday)}–${sunday.dayOfMonth}. ${monthShort.format(sunday)}"
         }
-        "KW ${monday.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)} · $range"
+        // Wie bei Tag und Monat: das Jahr nur, wenn die Woche (teils) nicht im laufenden Jahr liegt.
+        val year = if (monday.year != today.year || sunday.year != today.year) " ${sunday.year}" else ""
+        "KW ${monday.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)} · $range$year"
     }
     CalendarMode.DAY -> formatLongDate(selected) + if (selected.year != today.year) " ${selected.year}" else ""
 }
@@ -325,23 +329,26 @@ private fun PeriodNav(mode: CalendarMode, selected: LocalDate, today: LocalDate,
         CalendarMode.WEEK -> selected.plusWeeks(n)
         CalendarMode.MONTH -> selected.plusMonths(n)
     }
+    // ‹ Zeitraum › – wie die Wochenleiste auf der Startseite.
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(start = 24.dp, end = 8.dp, bottom = 6.dp),
+            .padding(horizontal = 12.dp)
+            .padding(bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        IconButton(onClick = { onSelect(step(-1)) }) {
+            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, contentDescription = previous, tint = p.muted)
+        }
         Text(
             periodTitle(mode, selected, today),
             style = MaterialTheme.typography.titleMedium,
             color = p.ink,
+            textAlign = TextAlign.Center,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        IconButton(onClick = { onSelect(step(-1)) }) {
-            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, contentDescription = previous, tint = p.muted)
-        }
         IconButton(onClick = { onSelect(step(1)) }) {
             Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = next, tint = p.muted)
         }
@@ -426,7 +433,7 @@ private fun RowScope.DayCell(
                 },
             )
             .semantics { contentDescription = formatLongDate(day) }
-            .clickable(onClick = onClick)
+            .selectable(selected = isSelected, onClick = onClick)
             .padding(top = 8.dp, bottom = 7.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -477,7 +484,8 @@ private fun WeekDayBlock(
             .fillMaxWidth()
             .clip(shape)
             .background(p.card)
-            .then(if (isSelected) Modifier.border(1.5.dp, p.accent, shape) else Modifier),
+            // accentStrong statt accent: bleibt bei jeder eigenen Farbe sichtbar (z. B. Dunkelblau im dunklen Modus).
+            .then(if (isSelected) Modifier.border(1.5.dp, p.accentStrong.copy(alpha = 0.6f), shape) else Modifier),
     ) {
         Row(
             Modifier
@@ -571,7 +579,8 @@ private fun CompactRow(
                 style = MaterialTheme.typography.labelMedium,
                 color = if (o.isOverdue(today)) p.danger else p.muted,
                 maxLines = 1,
-                modifier = Modifier.width(46.dp),
+                // Breite in sp, damit die Uhrzeit auch bei großer Schrift nicht am Titel klebt.
+                modifier = Modifier.width(with(LocalDensity.current) { 46.sp.toDp() }),
             )
         }
         Text(
@@ -619,7 +628,7 @@ private fun HourRow(
             style = MaterialTheme.typography.labelMedium,
             color = if (isNow) p.accentStrong else p.muted,
             maxLines = 1,
-            modifier = Modifier.width(52.dp),
+            modifier = Modifier.width(with(LocalDensity.current) { 52.sp.toDp() }),
         )
         Column(Modifier.weight(1f)) {
             // Haarlinie auf Höhe der Stundenzahl; die aktuelle Stunde in der Themenfarbe.
@@ -628,7 +637,7 @@ private fun HourRow(
                     Modifier
                         .fillMaxWidth()
                         .height(if (isNow) 2.dp else 1.dp)
-                        .background(if (isNow) p.accent else p.line),
+                        .background(if (isNow) p.accentStrong else p.line),
                 )
                 if (isNow) {
                     Box(
@@ -636,7 +645,7 @@ private fun HourRow(
                             .offset(x = (-4).dp)
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(p.accent),
+                            .background(p.accentStrong),
                     )
                     Text(
                         "Jetzt",
@@ -685,10 +694,11 @@ private fun EntryBlock(
     val soft = list.soft()
     val haptics = LocalHapticFeedback.current
     val overdue = o.isOverdue(today)
+    // „überfällig“ vor dem Listennamen, damit ein langer Name es nicht abschneidet.
     val meta = listOfNotNull(
         o.task.time?.takeIf { showTime }?.let(::formatTime),
-        list.name,
         "überfällig".takeIf { overdue },
+        list.name,
     ).joinToString(" · ")
     Row(
         modifier
@@ -745,7 +755,8 @@ private fun EntryBlock(
 private fun EmptyHint(modifier: Modifier = Modifier) {
     val p = Tagwerk.palette
     val shape = RoundedCornerShape(22.dp)
-    val dots = Tagwerk.settings.lists.take(3).map { it.soft() }
+    // Im dunklen Modus ist soft() fast durchsichtig – dann wie bei EmptyState der Pastellton, gedämpft.
+    val dots = Tagwerk.settings.lists.take(3).map { if (p.isDark) it.strong().copy(alpha = 0.45f) else it.soft() }
     Column(
         modifier
             .padding(horizontal = 16.dp, vertical = 5.dp)
